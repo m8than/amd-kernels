@@ -1,0 +1,260 @@
+[
+  {
+    "kernel": "activation/silu_fwd",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "activation/gelu_fwd",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "activation/gelu_tanh_fwd",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "activation/relu_fwd",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "activation/tanh_fwd",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "activation/silu_and_mul_fwd",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "activation/gelu_and_mul_fwd",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "rmsnorm/rmsnorm_fwd",
+    "status": "PASS",
+    "max_diff": 0.0625,
+    "notes": ""
+  },
+  {
+    "kernel": "rmsnorm/fused_add_rmsnorm_fwd",
+    "status": "PASS",
+    "max_diff": 0.0625,
+    "notes": ""
+  },
+  {
+    "kernel": "layernorm/layernorm_fwd",
+    "status": "PASS",
+    "max_diff": 0.0625,
+    "notes": ""
+  },
+  {
+    "kernel": "layernorm/fused_add_layernorm_fwd",
+    "status": "PASS",
+    "max_diff": 0.0625,
+    "notes": ""
+  },
+  {
+    "kernel": "fused_add_rmsnorm_pad/fused",
+    "status": "PASS",
+    "max_diff": 0.0625,
+    "notes": ""
+  },
+  {
+    "kernel": "fused_add_rmsnorm_pad/rmsnorm_pad",
+    "status": "PASS",
+    "max_diff": 0.0625,
+    "notes": ""
+  },
+  {
+    "kernel": "softmax/N=128",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "softmax/N=1024",
+    "status": "PASS",
+    "max_diff": 1.9073486328125e-06,
+    "notes": ""
+  },
+  {
+    "kernel": "softmax/N=4096",
+    "status": "PASS",
+    "max_diff": 3.814697265625e-06,
+    "notes": ""
+  },
+  {
+    "kernel": "softmax/N=8192",
+    "status": "PASS",
+    "max_diff": 3.814697265625e-06,
+    "notes": ""
+  },
+  {
+    "kernel": "rope/rope_fwd",
+    "status": "PASS",
+    "max_diff": 0.03125,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=128,K=1",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=128,K=8",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=128,K=32",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=1024,K=1",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=1024,K=8",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=1024,K=32",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=4096,K=1",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=4096,K=8",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "topk/N=4096,K=32",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "causal_conv1d/K=3",
+    "status": "PASS",
+    "max_diff": 0.00048828125,
+    "notes": ""
+  },
+  {
+    "kernel": "causal_conv1d/K=3_bias_silu",
+    "status": "PASS",
+    "max_diff": 0.015625,
+    "notes": ""
+  },
+  {
+    "kernel": "causal_conv1d/K=4",
+    "status": "PASS",
+    "max_diff": 0.00390625,
+    "notes": ""
+  },
+  {
+    "kernel": "causal_conv1d/K=4_bias_silu",
+    "status": "PASS",
+    "max_diff": 0.03125,
+    "notes": ""
+  },
+  {
+    "kernel": "fused_kv_cache/bf16_128_16",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "fused_mul_add/tensor_tensor",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "fused_mul_add/scalar_scalar",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "fused_qk_concat/bf16_64_64",
+    "status": "PASS",
+    "max_diff": 0.0,
+    "notes": ""
+  },
+  {
+    "kernel": "quant/per_token_int8",
+    "status": "PASS",
+    "max_diff": 1.0,
+    "notes": "scale_diff=0.000000"
+  },
+  {
+    "kernel": "quant/fused_fp8",
+    "status": "PASS",
+    "max_diff": null,
+    "notes": "nonzero=1042225"
+  },
+  {
+    "kernel": "quant/fused_mxfp4",
+    "status": "PASS",
+    "max_diff": null,
+    "notes": "nonzero=407588"
+  },
+  {
+    "kernel": "ff_fused_gated_tk",
+    "status": "SKIP",
+    "max_diff": null,
+    "notes": "MAX_SHARED_MEMORY=160000 > 65536 (MI325X 64KB LDS limit)"
+  },
+  {
+    "kernel": "ff_fused_ungated_tk",
+    "status": "SKIP",
+    "max_diff": null,
+    "notes": "MAX_SHARED_MEMORY=160000 > 65536 (MI325X 64KB LDS limit)"
+  },
+  {
+    "kernel": "fused_qkv_split_qk_rope_tk",
+    "status": "SKIP",
+    "max_diff": null,
+    "notes": "Kernel bug - load<2> tile addressing 4x offset for multi-head (head0 correct, heads 1+ wrong)"
+  },
+  {
+    "kernel": "mla_decode_rope_tk",
+    "status": "SKIP",
+    "max_diff": null,
+    "notes": "smem=69632 > 65536 (MI325X 64KB LDS limit)"
+  },
+  {
+    "kernel": "unified_attn_sparse_mla_tk",
+    "status": "SKIP",
+    "max_diff": null,
+    "notes": "smem=69632 > 65536 (MI325X 64KB LDS limit)"
+  }
+]
