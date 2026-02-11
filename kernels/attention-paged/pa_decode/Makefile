@@ -1,0 +1,47 @@
+# Paged Attention Decode - HipKittens Kernel Makefile
+
+GPU_TARGET ?= CDNA4
+TARGET = pa_decode_kernel
+SRC = kernel.cpp
+
+# Default parameters
+PA_NUM_SEQS ?= 32
+PA_HEAD_SZ ?= 128
+PA_NUM_KV_HEADS ?= 8
+PA_QUERY_GRP_SZ ?= 8
+PA_KV_BLK_SZ ?= 16
+PA_MAX_NUM_BLOCKS ?= 128
+
+CPPFLAGS += -DPA_NUM_SEQS=$(PA_NUM_SEQS)
+CPPFLAGS += -DPA_HEAD_SZ=$(PA_HEAD_SZ)
+CPPFLAGS += -DPA_NUM_KV_HEADS=$(PA_NUM_KV_HEADS)
+CPPFLAGS += -DPA_QUERY_GRP_SZ=$(PA_QUERY_GRP_SZ)
+CPPFLAGS += -DPA_KV_BLK_SZ=$(PA_KV_BLK_SZ)
+CPPFLAGS += -DPA_MAX_NUM_BLOCKS=$(PA_MAX_NUM_BLOCKS)
+
+# HIP/ROCm paths
+ROCM_INSTALL_DIR := $(ROCM_PATH)
+HIP_INCLUDE_DIR  := $(ROCM_INSTALL_DIR)/include/hip
+HIPCXX ?= $(ROCM_INSTALL_DIR)/bin/hipcc
+
+# Compiler flags based on GPU target
+ifeq ($(GPU_TARGET),CDNA2)
+HIPFLAGS += -DKITTENS_CDNA2 --offload-arch=gfx90a
+else ifeq ($(GPU_TARGET),CDNA3)
+HIPFLAGS += -DKITTENS_CDNA3 --offload-arch=gfx942
+else ifeq ($(GPU_TARGET),CDNA4)
+HIPFLAGS += -DKITTENS_CDNA4 --offload-arch=gfx950 -DHIP_ENABLE_WARP_SYNC_BUILTINS -ffast-math
+endif
+
+CXX_STD := c++20
+ICXXFLAGS := -std=$(CXX_STD) -w
+ICPPFLAGS := -I${THUNDERKITTENS_ROOT}/include -I$(HIP_INCLUDE_DIR)
+ICPPFLAGS += $(CPPFLAGS)
+
+all: $(TARGET)
+
+$(TARGET): $(SRC)
+	$(HIPCXX) $(SRC) $(HIPFLAGS) $(ICXXFLAGS) $(ICPPFLAGS) -o $(TARGET) -shared -fPIC
+
+clean:
+	rm -f $(TARGET) *.o *.so

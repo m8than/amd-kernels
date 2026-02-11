@@ -1,0 +1,40 @@
+# Chunked Paged Attention Prefill - HipKittens Kernel Makefile
+
+GPU_TARGET ?= CDNA4
+TARGET = chunked_pa_kernel
+SRC = kernel.cpp
+
+CPA_HEAD_SZ ?= 128
+CPA_NUM_KV_HEADS ?= 8
+CPA_NUM_Q_HEADS ?= 64
+CPA_BLOCK_SIZE ?= 16
+
+CPPFLAGS += -DCPA_HEAD_SZ=$(CPA_HEAD_SZ)
+CPPFLAGS += -DCPA_NUM_KV_HEADS=$(CPA_NUM_KV_HEADS)
+CPPFLAGS += -DCPA_NUM_Q_HEADS=$(CPA_NUM_Q_HEADS)
+CPPFLAGS += -DCPA_BLOCK_SIZE=$(CPA_BLOCK_SIZE)
+
+ROCM_INSTALL_DIR := $(ROCM_PATH)
+HIP_INCLUDE_DIR  := $(ROCM_INSTALL_DIR)/include/hip
+HIPCXX ?= $(ROCM_INSTALL_DIR)/bin/hipcc
+
+ifeq ($(GPU_TARGET),CDNA2)
+HIPFLAGS += -DKITTENS_CDNA2 --offload-arch=gfx90a
+else ifeq ($(GPU_TARGET),CDNA3)
+HIPFLAGS += -DKITTENS_CDNA3 --offload-arch=gfx942
+else ifeq ($(GPU_TARGET),CDNA4)
+HIPFLAGS += -DKITTENS_CDNA4 --offload-arch=gfx950 -DHIP_ENABLE_WARP_SYNC_BUILTINS -ffast-math
+endif
+
+CXX_STD := c++20
+ICXXFLAGS := -std=$(CXX_STD) -w
+ICPPFLAGS := -I${THUNDERKITTENS_ROOT}/include -I$(HIP_INCLUDE_DIR)
+ICPPFLAGS += $(CPPFLAGS)
+
+all: $(TARGET)
+
+$(TARGET): $(SRC)
+	$(HIPCXX) $(SRC) $(HIPFLAGS) $(ICXXFLAGS) $(ICPPFLAGS) -o $(TARGET) -shared -fPIC
+
+clean:
+	rm -f $(TARGET) *.o *.so
