@@ -174,34 +174,74 @@ void dispatch_fused_add_rmsnorm_fwd(fused_add_rmsnorm_globals<D> g) {
 }
 
 // ---------------------------------------------------------------------------
-// Instantiate for common model dimensions and expose via pybind11.
-// We default to D=128 (head dimension) which is common for LLMs.
-// For full hidden-dim normalization (e.g. 4096), the user would need
-// to add additional template instantiations.
+// Instantiate for common LLM hidden dimensions and expose via pybind11.
+// Each dimension gets its own function: rmsnorm_fwd_<D>, fused_add_rmsnorm_fwd_<D>
 // ---------------------------------------------------------------------------
 
-constexpr int D = 128;
-
-PYBIND11_MODULE(rmsnorm_tk, m) {
-    m.doc() = "HipKittens RMSNorm kernels";
-
-    // Basic RMSNorm forward
-    py::bind_function<dispatch_rmsnorm_fwd<D>>(m, "rmsnorm_fwd",
-        &rmsnorm_globals<D>::input,
-        &rmsnorm_globals<D>::weight,
-        &rmsnorm_globals<D>::output,
-        &rmsnorm_globals<D>::epsilon,
-        &rmsnorm_globals<D>::n_rows
+#define BIND_RMSNORM(D_VAL) \
+    py::bind_function<dispatch_rmsnorm_fwd<D_VAL>>(m, "rmsnorm_fwd_" #D_VAL, \
+        &rmsnorm_globals<D_VAL>::input, \
+        &rmsnorm_globals<D_VAL>::weight, \
+        &rmsnorm_globals<D_VAL>::output, \
+        &rmsnorm_globals<D_VAL>::epsilon, \
+        &rmsnorm_globals<D_VAL>::n_rows \
     );
 
-    // Fused Add + RMSNorm forward
-    py::bind_function<dispatch_fused_add_rmsnorm_fwd<D>>(m, "fused_add_rmsnorm_fwd",
-        &fused_add_rmsnorm_globals<D>::input,
-        &fused_add_rmsnorm_globals<D>::residual,
-        &fused_add_rmsnorm_globals<D>::weight,
-        &fused_add_rmsnorm_globals<D>::output,
-        &fused_add_rmsnorm_globals<D>::res_out,
-        &fused_add_rmsnorm_globals<D>::epsilon,
-        &fused_add_rmsnorm_globals<D>::n_rows
+#define BIND_FUSED_ADD_RMSNORM(D_VAL) \
+    py::bind_function<dispatch_fused_add_rmsnorm_fwd<D_VAL>>(m, "fused_add_rmsnorm_fwd_" #D_VAL, \
+        &fused_add_rmsnorm_globals<D_VAL>::input, \
+        &fused_add_rmsnorm_globals<D_VAL>::residual, \
+        &fused_add_rmsnorm_globals<D_VAL>::weight, \
+        &fused_add_rmsnorm_globals<D_VAL>::output, \
+        &fused_add_rmsnorm_globals<D_VAL>::res_out, \
+        &fused_add_rmsnorm_globals<D_VAL>::epsilon, \
+        &fused_add_rmsnorm_globals<D_VAL>::n_rows \
+    );
+
+#define BIND_BOTH(D_VAL) \
+    BIND_RMSNORM(D_VAL) \
+    BIND_FUSED_ADD_RMSNORM(D_VAL)
+
+PYBIND11_MODULE(rmsnorm_tk, m) {
+    m.doc() = "HipKittens RMSNorm kernels (multi-dimension)";
+
+    // Head dimensions
+    BIND_BOTH(128)
+    BIND_BOTH(256)
+
+    // Small model hidden sizes
+    BIND_BOTH(512)
+    BIND_BOTH(768)
+    BIND_BOTH(1024)   // Qwen3-0.6B
+    BIND_BOTH(1536)   // Qwen3-1.7B
+
+    // Medium model hidden sizes
+    BIND_BOTH(2048)
+    BIND_BOTH(2560)   // Qwen3-4B
+    BIND_BOTH(3072)   // Gemma-2B
+    BIND_BOTH(3584)   // Qwen2.5-7B
+    BIND_BOTH(4096)   // Llama-8B, Mistral-7B
+
+    // Large model hidden sizes
+    BIND_BOTH(5120)   // Llama-13B, Qwen3-32B
+    BIND_BOTH(7168)   // DeepSeek-V3
+    BIND_BOTH(8192)   // Llama-70B, Qwen2.5-72B
+
+    // Backward-compat aliases (D=128 default)
+    py::bind_function<dispatch_rmsnorm_fwd<128>>(m, "rmsnorm_fwd",
+        &rmsnorm_globals<128>::input,
+        &rmsnorm_globals<128>::weight,
+        &rmsnorm_globals<128>::output,
+        &rmsnorm_globals<128>::epsilon,
+        &rmsnorm_globals<128>::n_rows
+    );
+    py::bind_function<dispatch_fused_add_rmsnorm_fwd<128>>(m, "fused_add_rmsnorm_fwd",
+        &fused_add_rmsnorm_globals<128>::input,
+        &fused_add_rmsnorm_globals<128>::residual,
+        &fused_add_rmsnorm_globals<128>::weight,
+        &fused_add_rmsnorm_globals<128>::output,
+        &fused_add_rmsnorm_globals<128>::res_out,
+        &fused_add_rmsnorm_globals<128>::epsilon,
+        &fused_add_rmsnorm_globals<128>::n_rows
     );
 }
