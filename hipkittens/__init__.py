@@ -24,148 +24,187 @@ Usage:
 
 import importlib.util
 import os
-import sys
-import types
+import sysconfig
 
-_KERNELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kernels")
+# ─── Kernel discovery ───
 
-# Registry of all loaded modules
-modules = {}
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_KERNELS_DIR = os.path.join(_THIS_DIR, "kernels")
+if not os.path.isdir(_KERNELS_DIR):
+    _KERNELS_DIR = os.path.join(_THIS_DIR, "..", "kernels")
+if not os.path.isdir(_KERNELS_DIR):
+    _KERNELS_DIR = os.environ.get("HIPKITTENS_KERNELS_DIR", _KERNELS_DIR)
 
-# ─── Module loading ───
+_EXT_SUFFIX = sysconfig.get_config_var("EXT_SUFFIX") or ".cpython-312-x86_64-linux-gnu.so"
+_SKIP_PREFIXES = ("ds_read_test", "hk_", "mfma_", "gemm_debug", "test_")
+_SKIP_NAMES = {"gemm_a16w16_cdna3_tk", "gemm_hk_tk", "mfma_test_tk"}
 
-def _load_so(name, so_path):
-    """Load a compiled .so kernel module by path."""
-    spec = importlib.util.spec_from_file_location(name, so_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+# Map module_name -> so_path (discovered at import, loaded lazily)
+_so_paths = {}
+# Cache of actually loaded modules
+_loaded = {}
 
-def _find_and_load_all():
-    """Discover and load all *_tk.so kernel modules."""
-    suffix = ".cpython-312-x86_64-linux-gnu.so"
-    # Also try generic .so for other Python versions
-    skip_prefixes = ("ds_read_test", "hk_", "mfma_", "gemm_debug", "test_")
-
+def _discover():
+    """Walk kernels dir and index all .so files without loading them."""
+    if not os.path.isdir(_KERNELS_DIR):
+        return
     for root, _dirs, files in os.walk(_KERNELS_DIR):
         for f in sorted(files):
-            if not f.endswith(suffix):
+            if not f.endswith(_EXT_SUFFIX):
                 continue
-            mod_name = f.replace(suffix, "")
-            if any(mod_name.startswith(p) for p in skip_prefixes):
+            name = f.replace(_EXT_SUFFIX, "")
+            if any(name.startswith(p) for p in _SKIP_PREFIXES):
                 continue
-            # Skip duplicate gemm_a16w16 variants (cdna3, hk versions)
-            if mod_name in ("gemm_a16w16_cdna3_tk", "gemm_hk_tk", "mfma_test_tk"):
+            if name in _SKIP_NAMES:
                 continue
-            so_path = os.path.join(root, f)
-            try:
-                modules[mod_name] = _load_so(mod_name, so_path)
-            except Exception:
-                pass  # Skip modules that fail to load
+            _so_paths[name] = os.path.join(root, f)
 
-_find_and_load_all()
+_discover()
 
-# ─── Top-level convenience functions (from tested kernels) ───
 
-# Normalization
-def _get(mod_name, func_name):
-    m = modules.get(mod_name)
-    if m is None:
-        raise RuntimeError(f"Kernel module '{mod_name}' not loaded. Did you compile it?")
-    fn = getattr(m, func_name, None)
+def _load(name):
+    """Load a single .so module by name (cached)."""
+    if name in _loaded:
+        return _loaded[name]
+    path = _so_paths.get(name)
+    if path is None:
+        raise RuntimeError(f"Kernel module '{name}' not found. Did you compile it?")
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    _loaded[name] = mod
+    return mod
+
+
+class _LazyModuleDict:
+    """Dict-like access to kernel modules with lazy loading."""
+    def __getitem__(self, name):
+        return _load(name)
+    def __contains__(self, name):
+        return name in _so_paths
+    def __len__(self):
+        return len(_so_paths)
+    def keys(self):
+        return _so_paths.keys()
+    def items(self):
+        for name in _so_paths:
+            yield name, _load(name)
+    def get(self, name, default=None):
+        try:
+            return _load(name)
+        except RuntimeError:
+            return default
+    def __repr__(self):
+        loaded = len(_loaded)
+        total = len(_so_paths)
+        return f"<hipkittens.modules: {total} available, {loaded} loaded>"
+
+modules = _LazyModuleDict()
+
+
+def _call(mod_name, func_name, *args, **kwargs):
+    """Load module and call function."""
+    mod = _load(mod_name)
+    fn = getattr(mod, func_name, None)
     if fn is None:
         raise RuntimeError(f"Function '{func_name}' not found in '{mod_name}'")
-    return fn
+    return fn(*args, **kwargs)
 
-# --- Normalization ---
+
+# ─── Top-level convenience functions ───
+
+# Normalization
 def rmsnorm_fwd(x, w, out, eps, N):
-    return _get("rmsnorm_tk", "rmsnorm_fwd")(x, w, out, eps, N)
+    return _call("rmsnorm_tk", "rmsnorm_fwd", x, w, out, eps, N)
 
 def fused_add_rmsnorm_fwd(x, res, w, out, res_out, eps, N):
-    return _get("rmsnorm_tk", "fused_add_rmsnorm_fwd")(x, res, w, out, res_out, eps, N)
+    return _call("rmsnorm_tk", "fused_add_rmsnorm_fwd", x, res, w, out, res_out, eps, N)
 
 def layernorm_fwd(x, w, b, out, eps, N):
-    return _get("layernorm_tk", "layernorm_fwd")(x, w, b, out, eps, N)
+    return _call("layernorm_tk", "layernorm_fwd", x, w, b, out, eps, N)
 
 def fused_add_layernorm_fwd(x, res, w, b, out, res_out, eps, N):
-    return _get("layernorm_tk", "fused_add_layernorm_fwd")(x, res, w, b, out, res_out, eps, N)
+    return _call("layernorm_tk", "fused_add_layernorm_fwd", x, res, w, b, out, res_out, eps, N)
 
 def rmsnorm_pad(x, w, out, eps, N):
-    return _get("fused_add_rmsnorm_pad_tk", "rmsnorm_pad")(x, w, out, eps, N)
+    return _call("fused_add_rmsnorm_pad_tk", "rmsnorm_pad", x, w, out, eps, N)
 
 def fused_add_rmsnorm_pad(x, res, w, out, res_out, eps, N):
-    return _get("fused_add_rmsnorm_pad_tk", "fused_add_rmsnorm_pad")(x, res, w, out, res_out, eps, N)
+    return _call("fused_add_rmsnorm_pad_tk", "fused_add_rmsnorm_pad", x, res, w, out, res_out, eps, N)
 
-# --- Activations ---
+# Activations
 def silu_fwd(x, out):
-    return _get("activation_tk", "silu_fwd")(x, out)
+    return _call("activation_tk", "silu_fwd", x, out)
 
 def gelu_fwd(x, out):
-    return _get("activation_tk", "gelu_fwd")(x, out)
+    return _call("activation_tk", "gelu_fwd", x, out)
 
 def relu_fwd(x, out):
-    return _get("activation_tk", "relu_fwd")(x, out)
+    return _call("activation_tk", "relu_fwd", x, out)
 
 def tanh_fwd(x, out):
-    return _get("activation_tk", "tanh_fwd")(x, out)
+    return _call("activation_tk", "tanh_fwd", x, out)
 
 def gelu_tanh_fwd(x, out):
-    return _get("activation_tk", "gelu_tanh_fwd")(x, out)
+    return _call("activation_tk", "gelu_tanh_fwd", x, out)
 
 def silu_and_mul_fwd(xg, out):
-    return _get("activation_tk", "silu_and_mul_fwd")(xg, out)
+    return _call("activation_tk", "silu_and_mul_fwd", xg, out)
 
 def gelu_and_mul_fwd(xg, out):
-    return _get("activation_tk", "gelu_and_mul_fwd")(xg, out)
+    return _call("activation_tk", "gelu_and_mul_fwd", xg, out)
 
-# --- Softmax ---
+# Softmax
 def softmax_fwd(x, out):
-    return _get("softmax_tk", "softmax_fwd")(x, out)
+    return _call("softmax_tk", "softmax_fwd", x, out)
 
-# --- RoPE ---
+# RoPE
 def rope_fwd(x, out, cos_half, sin_half):
-    return _get("rope_tk", "rope_fwd")(x, out, cos_half, sin_half)
+    return _call("rope_tk", "rope_fwd", x, out, cos_half, sin_half)
 
-# --- Top-K ---
+# Top-K
 def topk_fwd(x, out_vals, out_idx, K):
-    return _get("topk_tk", "topk_fwd")(x, out_vals, out_idx, K)
+    return _call("topk_tk", "topk_fwd", x, out_vals, out_idx, K)
 
-# --- Causal Conv1D ---
+# Causal Conv1D
 def causal_conv1d_fwd(*args, **kwargs):
-    return _get("causal_conv1d_tk", "causal_conv1d_fwd")(*args, **kwargs)
+    return _call("causal_conv1d_tk", "causal_conv1d_fwd", *args, **kwargs)
 
 def causal_conv1d_bias_silu_fwd(*args, **kwargs):
-    return _get("causal_conv1d_tk", "causal_conv1d_bias_silu_fwd")(*args, **kwargs)
+    return _call("causal_conv1d_tk", "causal_conv1d_bias_silu_fwd", *args, **kwargs)
 
-# --- Fused QKV Split + QK RoPE ---
+# Fused QKV Split + QK RoPE
 def fused_qkv_split_qk_rope_fwd(*args, **kwargs):
-    return _get("fused_qkv_split_qk_rope_tk", "fused_qkv_split_qk_rope_fwd")(*args, **kwargs)
+    return _call("fused_qkv_split_qk_rope_tk", "fused_qkv_split_qk_rope_fwd", *args, **kwargs)
 
-# --- Quantization ---
+# Quantization
 def per_token_quant_fwd(*args, **kwargs):
-    return _get("quant_tk", "per_token_quant_fwd")(*args, **kwargs)
+    return _call("quant_tk", "per_token_quant_fwd", *args, **kwargs)
 
 def fused_rmsnorm_fp8_quant_fwd(*args, **kwargs):
-    return _get("fused_fp8_quant_tk", "fused_rmsnorm_fp8_quant_fwd")(*args, **kwargs)
+    return _call("fused_fp8_quant_tk", "fused_rmsnorm_fp8_quant_fwd", *args, **kwargs)
 
 def fused_rmsnorm_mxfp4_quant_fwd(*args, **kwargs):
-    return _get("fused_mxfp4_quant_tk", "fused_rmsnorm_mxfp4_quant_fwd")(*args, **kwargs)
+    return _call("fused_mxfp4_quant_tk", "fused_rmsnorm_mxfp4_quant_fwd", *args, **kwargs)
 
-# --- L2 Norm ---
+# L2 Norm
 def l2norm_fwd(*args, **kwargs):
-    return _get("l2norm_tk", "l2norm_fwd")(*args, **kwargs)
+    return _call("l2norm_tk", "l2norm_fwd", *args, **kwargs)
 
 def l2norm_bwd(*args, **kwargs):
-    return _get("l2norm_tk", "l2norm_bwd")(*args, **kwargs)
+    return _call("l2norm_tk", "l2norm_bwd", *args, **kwargs)
+
 
 # ─── Namespace sub-modules for GEMM / MoE / etc. ───
 
 class _SubModule:
-    """Lazy namespace that wraps a kernel module."""
+    """Lazy namespace that wraps a kernel module (loaded on first access)."""
     def __init__(self, mod_name):
         self._mod_name = mod_name
     def __getattr__(self, name):
-        return getattr(modules[self._mod_name], name)
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(_load(self._mod_name), name)
     def __repr__(self):
         return f"<hipkittens.{self._mod_name}>"
 
@@ -183,21 +222,18 @@ class _GemmNamespace:
     afp4wfp4        = _SubModule("gemm_afp4wfp4_tk")
 
 class _BatchedGemmNamespace:
-    """hk.batched_gemm.bf16.dispatch(...) etc."""
     bf16     = _SubModule("batched_gemm_bf16_tk")
     a8w8     = _SubModule("batched_gemm_a8w8_tk")
     a16wfp4  = _SubModule("batched_gemm_a16wfp4_tk")
     afp4wfp4 = _SubModule("batched_gemm_afp4wfp4_tk")
 
 class _FusedGemmNamespace:
-    """hk.fused_gemm.a8w8_blockscale_a16w16.dispatch(...) etc."""
     a8w8_blockscale_a16w16 = _SubModule("fused_gemm_a8w8_blockscale_a16w16_tk")
     a8w8_blockscale_mul_add= _SubModule("fused_gemm_a8w8_blockscale_mul_add_tk")
     afp4wfp4_a16w16        = _SubModule("fused_gemm_afp4wfp4_a16w16_tk")
     afp4wfp4_mul_add       = _SubModule("fused_gemm_afp4wfp4_mul_add_tk")
 
 class _MoeGemmNamespace:
-    """hk.moe.gemm(...), hk.moe.silu_fused(...) etc."""
     gemm              = _SubModule("moe_op_tk")
     e2e               = _SubModule("moe_op_e2e_tk")
     gelu              = _SubModule("moe_op_gelu_tk")
@@ -210,7 +246,6 @@ class _MoeGemmNamespace:
     mxfp4_silu_fused  = _SubModule("moe_op_mxfp4_silu_fused_tk")
 
 class _MoeRoutingNamespace:
-    """hk.moe_routing.align_block_size(...) etc."""
     align_block_size          = _SubModule("moe_align_block_size_tk")
     bitmatrix                 = _SubModule("moe_bitmatrix_tk")
     expt_data                 = _SubModule("moe_expt_data_tk")
@@ -219,7 +254,6 @@ class _MoeRoutingNamespace:
     quant                     = _SubModule("quant_moe_tk")
 
 class _FeedforwardNamespace:
-    """hk.feedforward.gated.dispatch_4096(...) etc."""
     gated            = _SubModule("ff_fused_gated_tk")
     ungated          = _SubModule("ff_fused_ungated_tk")
     kv_cache         = _SubModule("fused_kv_cache_tk")
@@ -227,7 +261,6 @@ class _FeedforwardNamespace:
     qk_concat        = _SubModule("fused_qk_concat_tk")
 
 class _GdrDecodeNamespace:
-    """hk.gdr_decode.recurrent.fused_recurrent_fwd(...) etc."""
     recurrent                  = _SubModule("fused_recurrent_tk")
     sigmoid_gating_recurrent   = _SubModule("fused_sigmoid_gating_recurrent_tk")
     causal_conv1d_split_qkv    = _SubModule("causal_conv1d_split_qkv_tk")
@@ -235,7 +268,6 @@ class _GdrDecodeNamespace:
     utils                      = _SubModule("gdr_utils_tk")
 
 class _GdrPrefillNamespace:
-    """hk.gdr_prefill.chunk.chunk_pipeline(...) etc."""
     chunk                    = _SubModule("chunk_tk")
     chunk_delta_h            = _SubModule("chunk_delta_h_tk")
     chunk_o                  = _SubModule("chunk_o_tk")
@@ -249,7 +281,6 @@ class _GdrPrefillNamespace:
     causal_conv1d_fwd_split  = _SubModule("causal_conv1d_fwd_split_qkv_tk")
 
 class _AttentionNamespace:
-    """hk.attention.mla_decode(...) etc."""
     mla_decode   = _SubModule("mla_decode_rope_tk")
     sparse_mla   = _SubModule("unified_attn_sparse_mla_tk")
 
