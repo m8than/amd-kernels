@@ -113,11 +113,20 @@ def _call(mod_name, func_name, *args, **kwargs):
 
 # ─── Top-level convenience functions ───
 
-# Normalization
+# Normalization — dimension-aware dispatch
+_RMSNORM_SUPPORTED_D = {128, 256, 512, 768, 1024, 1536, 2048, 2560,
+                        3072, 3584, 4096, 5120, 7168, 8192}
+
 def rmsnorm_fwd(x, w, out, eps, N):
+    D = x.shape[-1]
+    if D in _RMSNORM_SUPPORTED_D:
+        return _call("rmsnorm_tk", f"rmsnorm_fwd_{D}", x, w, out, eps, N)
     return _call("rmsnorm_tk", "rmsnorm_fwd", x, w, out, eps, N)
 
 def fused_add_rmsnorm_fwd(x, res, w, out, res_out, eps, N):
+    D = x.shape[-1]
+    if D in _RMSNORM_SUPPORTED_D:
+        return _call("rmsnorm_tk", f"fused_add_rmsnorm_fwd_{D}", x, res, w, out, res_out, eps, N)
     return _call("rmsnorm_tk", "fused_add_rmsnorm_fwd", x, res, w, out, res_out, eps, N)
 
 def layernorm_fwd(x, w, b, out, eps, N):
